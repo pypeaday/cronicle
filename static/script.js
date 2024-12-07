@@ -60,6 +60,7 @@ async function refreshJobs() {
             
             // Add to jobs table
             const row = document.createElement('tr');
+            row.className = job.paused ? 'text-muted' : '';
             row.innerHTML = `
                 <td>${job.job_id}</td>
                 <td>
@@ -68,7 +69,10 @@ async function refreshJobs() {
                 </td>
                 <td class="text-center">${job.tolerance_minutes}</td>
                 <td class="text-center">${isHeartbeat ? 'N/A' : job.max_runtime_minutes}</td>
-                <td><span class="badge ${isHeartbeat ? 'bg-secondary' : 'bg-primary'}">${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</span></td>
+                <td>
+                    <span class="badge ${isHeartbeat ? 'bg-secondary' : 'bg-primary'}">${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</span>
+                    ${job.paused ? '<span class="badge bg-warning ms-1">Paused</span>' : ''}
+                </td>
                 <td>
                     <div class="d-flex gap-2">
                         ${!job.paused ? 
@@ -237,7 +241,7 @@ async function refreshSimulations() {
             // Last End column
             const lastEndCell = document.createElement('td');
             if (isHealthCheck) {
-                lastEndCell.innerHTML = '<em>N/A</em>';
+                lastEndCell.innerHTML = '<em class="text-muted">N/A</em>';
             } else {
                 lastEndCell.textContent = job.last_end_time ? new Date(job.last_end_time).toLocaleString() : 'Never';
             }
@@ -246,9 +250,12 @@ async function refreshSimulations() {
             // Duration column
             const durationCell = document.createElement('td');
             if (isHealthCheck) {
-                durationCell.innerHTML = '<em>Instant</em>';
+                durationCell.innerHTML = '<em class="text-muted">N/A</em>';
+            } else if (job.last_start_time && job.last_end_time) {
+                const duration = (new Date(job.last_end_time) - new Date(job.last_start_time)) / (1000 * 60);
+                durationCell.textContent = formatDuration(duration);
             } else {
-                durationCell.textContent = job.duration ? `${job.duration} minutes` : '-';
+                durationCell.textContent = '-';
             }
             row.appendChild(durationCell);
             
@@ -256,14 +263,17 @@ async function refreshSimulations() {
             const statusCell = document.createElement('td');
             let status;
             if (job.paused) {
-                status = 'Paused';
+                status = '<span class="badge bg-warning">Paused</span>';
             } else if (isHealthCheck) {
-                status = job.last_start_time ? 'Ready' : 'Waiting for First Check';
+                status = job.last_start_time ? 
+                    '<span class="badge bg-success">Ready</span>' : 
+                    '<span class="badge bg-secondary">Waiting</span>';
             } else {
                 status = job.last_start_time && (!job.last_end_time || new Date(job.last_start_time) > new Date(job.last_end_time)) ? 
-                    'Running' : 'Not Running';
+                    '<span class="badge bg-primary">Running</span>' : 
+                    '<span class="badge bg-secondary">Not Running</span>';
             }
-            statusCell.textContent = status;
+            statusCell.innerHTML = status;
             row.appendChild(statusCell);
             
             // Actions column
@@ -278,7 +288,7 @@ async function refreshSimulations() {
                 startBtn.title = 'Start Job';
             }
             startBtn.onclick = () => startJob(job.job_id);
-            startBtn.disabled = (status === 'Running' && !isHealthCheck) || job.paused;
+            startBtn.disabled = (status.includes('Running') && !isHealthCheck) || job.paused;
             actionsCell.appendChild(startBtn);
             
             // Only show end button for monitored jobs
@@ -286,25 +296,18 @@ async function refreshSimulations() {
                 const endBtn = document.createElement('button');
                 endBtn.className = 'btn btn-sm btn-danger me-1';
                 endBtn.innerHTML = '<i class="bi bi-stop-fill"></i>';
+                endBtn.title = 'End Job';
                 endBtn.onclick = () => endJob(job.job_id);
-                endBtn.disabled = status !== 'Running' || job.paused;
+                endBtn.disabled = !status.includes('Running') || job.paused;
                 actionsCell.appendChild(endBtn);
             }
-            
-            const pauseBtn = document.createElement('button');
-            pauseBtn.className = 'btn btn-sm btn-warning';
-            pauseBtn.innerHTML = job.paused ? 
-                '<i class="bi bi-play-fill"></i>' : 
-                '<i class="bi bi-pause-fill"></i>';
-            pauseBtn.onclick = () => job.paused ? resumeJob(job.job_id) : pauseJob(job.job_id);
-            actionsCell.appendChild(pauseBtn);
             
             row.appendChild(actionsCell);
             simulationsList.appendChild(row);
         }
     } catch (error) {
         console.error('Error refreshing simulations:', error);
-        showToast('Error', 'Failed to refresh simulations', 'error');
+        showToast('Error', 'Failed to refresh simulations: ' + error.message, 'error');
     }
 }
 
@@ -733,26 +736,20 @@ async function startJob(jobId) {
 async function pauseJob(jobId) {
     try {
         const response = await fetch(`/jobs/${jobId}/pause`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            method: 'POST'
         });
         
-        if (response.ok) {
-            showToast('Success', 'Job paused successfully');
-            // Refresh both job tables since pause affects both views
-            await Promise.all([
-                refreshJobs(),
-                refreshSimulations()
-            ]);
-        } else {
-            const error = await response.json();
-            showToast('Error', error.detail || 'Failed to pause job', 'error');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        await Promise.all([
+            refreshJobs(),
+            refreshSimulations()
+        ]);
+        showToast('Success', `Paused monitoring for job ${jobId}`);
     } catch (error) {
-        showToast('Error', 'Failed to pause job', 'error');
-        console.error('Error pausing job:', error);
+        showToast('Error', `Failed to pause job: ${error.message}`, 'error');
     }
 }
 
@@ -760,26 +757,20 @@ async function pauseJob(jobId) {
 async function resumeJob(jobId) {
     try {
         const response = await fetch(`/jobs/${jobId}/resume`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            method: 'POST'
         });
         
-        if (response.ok) {
-            showToast('Success', 'Job resumed successfully');
-            // Refresh both job tables since resume affects both views
-            await Promise.all([
-                refreshJobs(),
-                refreshSimulations()
-            ]);
-        } else {
-            const error = await response.json();
-            showToast('Error', error.detail || 'Failed to resume job', 'error');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        await Promise.all([
+            refreshJobs(),
+            refreshSimulations()
+        ]);
+        showToast('Success', `Resumed monitoring for job ${jobId}`);
     } catch (error) {
-        showToast('Error', 'Failed to resume job', 'error');
-        console.error('Error resuming job:', error);
+        showToast('Error', `Failed to resume job: ${error.message}`, 'error');
     }
 }
 

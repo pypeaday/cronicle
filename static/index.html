@@ -51,6 +51,13 @@
             background-color: var(--bs-body-bg);
             border-color: var(--bs-border-color);
         }
+
+        .text-muted {
+            opacity: 0.6;
+        }
+        [data-bs-theme="dark"] .text-muted {
+            opacity: 0.5;
+        }
     </style>
 </head>
 
@@ -98,6 +105,22 @@
                         <button type="button" class="btn btn-success" onclick="simulateJobEnd()">End Job</button>
                     </div>
                 </form>
+                <div class="table-responsive mt-3">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Last Start</th>
+                                <th>Last End</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="simulationsList">
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
