@@ -68,7 +68,7 @@ async function refreshJobs() {
                 </td>
                 <td class="text-center">${job.tolerance_minutes}</td>
                 <td class="text-center">${isHeartbeat ? 'N/A' : job.max_runtime_minutes}</td>
-                <td>${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</td>
+                <td><span class="badge ${isHeartbeat ? 'bg-secondary' : 'bg-primary'}">${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</span></td>
                 <td>
                     <div class="d-flex gap-2">
                         ${!job.paused ? 
@@ -116,10 +116,19 @@ async function refreshRuns() {
         document.getElementById('runsEndRange').textContent = Math.min(data.page * data.per_page, data.total);
         document.getElementById('totalRuns').textContent = data.total;
         
+        // Get job configurations to determine job types
+        const jobsResponse = await fetch('/jobs');
+        const jobs = await jobsResponse.json();
+        const jobConfigs = {};
+        jobs.forEach(job => {
+            jobConfigs[job.job_id] = job;
+        });
+        
         // Update table
         for (const run of data.runs) {
             const row = document.createElement('tr');
-            const isHeartbeat = !run.max_runtime_minutes;
+            const jobConfig = jobConfigs[run.job_id];
+            const isHeartbeat = jobConfig && !jobConfig.max_runtime_minutes;
             
             // Job ID
             const jobIdCell = document.createElement('td');
