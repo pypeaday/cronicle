@@ -43,47 +43,159 @@ function formatDateTime(isoString) {
 
 // Refresh jobs list
 async function refreshJobs() {
-    fetch('/jobs')
-        .then(response => response.json())
-        .then(jobs => {
-            const jobsList = document.getElementById('jobsList');
-            jobsList.innerHTML = '';
+    try {
+        const response = await fetch('/jobs');
+        const jobs = await response.json();
+        
+        // Update jobs table
+        const jobsList = document.getElementById('jobsList');
+        jobsList.innerHTML = '';
+        
+        // Update simulation dropdown
+        const jobSelect = document.getElementById('jobSelect');
+        jobSelect.innerHTML = '<option value="" selected disabled>Choose a job...</option>';
+        
+        jobs.forEach(job => {
+            const isHeartbeat = !job.max_runtime_minutes;
             
-            jobs.forEach(job => {
-                const row = document.createElement('tr');
-                const status = job.paused ? 'Paused' : 'Monitoring';
-                const statusClass = job.paused ? 'text-warning' : 'text-success';
-                
-                row.innerHTML = `
-                    <td>${job.job_id}</td>
-                    <td>
-                        ${job.schedule}
-                        <div class="small text-muted">${cronstrue.toString(job.schedule)}</div>
-                    </td>
-                    <td class="text-center">${job.tolerance_minutes}</td>
-                    <td class="text-center">${job.max_runtime_minutes}</td>
-                    <td>${formatDateTime(job.next_scheduled_run)}</td>
-                    <td><span class="${statusClass}">${status}</span></td>
-                    <td>
-                        <div class="d-flex gap-2">
-                            ${!job.paused ? 
-                                `<button class="btn btn-sm btn-outline-warning" onclick="pauseJob('${job.job_id}')" title="Pause Monitoring">
-                                    <i class="bi bi-pause-fill"></i>
-                                </button>` :
-                                `<button class="btn btn-sm btn-outline-success" onclick="resumeJob('${job.job_id}')" title="Resume Monitoring">
-                                    <i class="bi bi-play-fill"></i>
-                                </button>`
-                            }
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteJob('${job.job_id}')" title="Delete Job">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </td>
-                `;
-                jobsList.appendChild(row);
-            });
-        })
-        .catch(error => showToast('Error', 'Failed to refresh jobs: ' + error.message, 'error'));
+            // Add to jobs table
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${job.job_id}</td>
+                <td>
+                    ${job.schedule}
+                    <div class="small text-muted">${cronstrue.toString(job.schedule)}</div>
+                </td>
+                <td class="text-center">${job.tolerance_minutes}</td>
+                <td class="text-center">${isHeartbeat ? 'N/A' : job.max_runtime_minutes}</td>
+                <td>${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</td>
+                <td>
+                    <div class="d-flex gap-2">
+                        ${!job.paused ? 
+                            `<button class="btn btn-sm btn-outline-warning" onclick="pauseJob('${job.job_id}')" title="Pause Monitoring">
+                                <i class="bi bi-pause-fill"></i>
+                            </button>` :
+                            `<button class="btn btn-sm btn-outline-success" onclick="resumeJob('${job.job_id}')" title="Resume Monitoring">
+                                <i class="bi bi-play-fill"></i>
+                            </button>`
+                        }
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteJob('${job.job_id}')" title="Delete Job">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            jobsList.appendChild(row);
+            
+            // Add to simulation dropdown
+            const option = document.createElement('option');
+            option.value = job.job_id;
+            option.textContent = `${job.job_id} (${isHeartbeat ? 'Heartbeat' : 'Timed Job'})`;
+            jobSelect.appendChild(option);
+        });
+    } catch (error) {
+        showToast('Error', 'Failed to refresh jobs: ' + error.message, 'error');
+    }
+}
+
+// Global state for runs pagination
+let currentRunsPage = 1;
+let totalRunsPages = 1;
+
+async function refreshRuns() {
+    try {
+        const response = await fetch(`/job_runs?page=${currentRunsPage}`);
+        const data = await response.json();
+        
+        const runsList = document.getElementById('runsList');
+        runsList.innerHTML = '';
+        
+        // Update pagination info
+        totalRunsPages = data.total_pages;
+        document.getElementById('runsStartRange').textContent = ((data.page - 1) * data.per_page) + 1;
+        document.getElementById('runsEndRange').textContent = Math.min(data.page * data.per_page, data.total);
+        document.getElementById('totalRuns').textContent = data.total;
+        
+        // Update table
+        for (const run of data.runs) {
+            const row = document.createElement('tr');
+            const isHeartbeat = !run.max_runtime_minutes;
+            
+            // Job ID
+            const jobIdCell = document.createElement('td');
+            jobIdCell.textContent = run.job_id;
+            row.appendChild(jobIdCell);
+            
+            // Start Time
+            const startTimeCell = document.createElement('td');
+            startTimeCell.textContent = run.start_time ? new Date(run.start_time).toLocaleString() : '-';
+            row.appendChild(startTimeCell);
+            
+            // End Time
+            const endTimeCell = document.createElement('td');
+            if (isHeartbeat) {
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-secondary';
+                badge.textContent = 'Heartbeat';
+                endTimeCell.appendChild(badge);
+            } else {
+                endTimeCell.textContent = run.end_time ? new Date(run.end_time).toLocaleString() : 'Running...';
+            }
+            row.appendChild(endTimeCell);
+            
+            // Duration
+            const durationCell = document.createElement('td');
+            if (isHeartbeat) {
+                durationCell.innerHTML = '<em class="text-muted">N/A</em>';
+            } else if (run.duration) {
+                durationCell.textContent = formatDuration(run.duration);
+            } else if (run.start_time && !run.end_time) {
+                const currentDuration = (new Date() - new Date(run.start_time)) / (1000 * 60);
+                durationCell.innerHTML = `<em>${formatDuration(currentDuration)} (Running)</em>`;
+            } else {
+                durationCell.textContent = '-';
+            }
+            row.appendChild(durationCell);
+            
+            // Client Info
+            const clientInfoCell = document.createElement('td');
+            if (run.client_info) {
+                const viewButton = document.createElement('button');
+                viewButton.className = 'btn btn-sm btn-outline-info';
+                viewButton.innerHTML = '<i class="bi bi-info-circle"></i> View Details';
+                viewButton.onclick = () => showClientInfo(run.client_info);
+                clientInfoCell.appendChild(viewButton);
+            } else {
+                clientInfoCell.textContent = 'No info';
+            }
+            row.appendChild(clientInfoCell);
+            
+            runsList.appendChild(row);
+        }
+        
+        // Update pagination buttons
+        const prevButton = document.querySelector('button[onclick="previousRunsPage()"]');
+        const nextButton = document.querySelector('button[onclick="nextRunsPage()"]');
+        prevButton.disabled = currentRunsPage === 1;
+        nextButton.disabled = currentRunsPage === totalRunsPages;
+    } catch (error) {
+        console.error('Error refreshing runs:', error);
+        showToast('Error', 'Failed to refresh runs', 'error');
+    }
+}
+
+function previousRunsPage() {
+    if (currentRunsPage > 1) {
+        currentRunsPage--;
+        refreshRuns();
+    }
+}
+
+function nextRunsPage() {
+    if (currentRunsPage < totalRunsPages) {
+        currentRunsPage++;
+        refreshRuns();
+    }
 }
 
 // Refresh simulations list
@@ -187,112 +299,6 @@ async function refreshSimulations() {
     }
 }
 
-// Global state for runs pagination
-let currentRunsPage = 1;
-let totalRunsPages = 1;
-
-async function refreshRuns() {
-    try {
-        const response = await fetch(`/job_runs?page=${currentRunsPage}`);
-        const data = await response.json();
-        
-        const runsList = document.getElementById('runsList');
-        runsList.innerHTML = '';
-        
-        // Update pagination info
-        totalRunsPages = data.total_pages;
-        document.getElementById('runsStartRange').textContent = ((data.page - 1) * data.per_page) + 1;
-        document.getElementById('runsEndRange').textContent = Math.min(data.page * data.per_page, data.total);
-        document.getElementById('totalRuns').textContent = data.total;
-        
-        // Update table
-        for (const run of data.runs) {
-            const row = document.createElement('tr');
-            
-            // Job ID
-            const jobIdCell = document.createElement('td');
-            jobIdCell.textContent = run.job_id;
-            row.appendChild(jobIdCell);
-            
-            // Start Time
-            const startTimeCell = document.createElement('td');
-            startTimeCell.textContent = run.start_time ? new Date(run.start_time).toLocaleString() : '-';
-            row.appendChild(startTimeCell);
-            
-            // End Time
-            const endTimeCell = document.createElement('td');
-            if (run.is_health_check) {
-                const badge = document.createElement('span');
-                badge.className = 'badge bg-info';
-                badge.textContent = 'Health Check';
-                endTimeCell.appendChild(badge);
-            } else {
-                endTimeCell.textContent = run.end_time ? new Date(run.end_time).toLocaleString() : 'Running...';
-            }
-            row.appendChild(endTimeCell);
-            
-            // Duration
-            const durationCell = document.createElement('td');
-            if (run.is_health_check) {
-                const badge = document.createElement('span');
-                badge.className = 'badge bg-secondary';
-                badge.textContent = 'Instant';
-                durationCell.appendChild(badge);
-            } else if (run.duration) {
-                durationCell.textContent = formatDuration(run.duration);
-            } else if (run.start_time && !run.end_time) {
-                const currentDuration = (new Date() - new Date(run.start_time)) / (1000 * 60);
-                durationCell.innerHTML = `<em>${formatDuration(currentDuration)} (Running)</em>`;
-            } else {
-                durationCell.textContent = '-';
-            }
-            row.appendChild(durationCell);
-            
-            // Client Info
-            const clientInfoCell = document.createElement('td');
-            if (run.client_info) {
-                const viewButton = document.createElement('button');
-                viewButton.className = 'btn btn-sm btn-outline-info';
-                viewButton.innerHTML = '<i class="bi bi-info-circle"></i> View Details';
-                viewButton.onclick = () => showClientInfo(
-                    typeof run.client_info === 'string' ? 
-                    JSON.parse(run.client_info) : run.client_info
-                );
-                clientInfoCell.appendChild(viewButton);
-            } else {
-                clientInfoCell.textContent = 'No info';
-            }
-            row.appendChild(clientInfoCell);
-            
-            runsList.appendChild(row);
-        }
-        
-        // Update pagination buttons
-        const prevButton = document.querySelector('button[onclick="previousRunsPage()"]');
-        const nextButton = document.querySelector('button[onclick="nextRunsPage()"]');
-        prevButton.disabled = currentRunsPage === 1;
-        nextButton.disabled = currentRunsPage === totalRunsPages;
-    } catch (error) {
-        console.error('Error refreshing runs:', error);
-        showToast('Error', 'Failed to refresh runs', 'error');
-    }
-}
-
-function previousRunsPage() {
-    if (currentRunsPage > 1) {
-        currentRunsPage--;
-        refreshRuns();
-    }
-}
-
-function nextRunsPage() {
-    if (currentRunsPage < totalRunsPages) {
-        currentRunsPage++;
-        refreshRuns();
-    }
-}
-
-// Refresh alerts list
 async function refreshAlerts() {
     try {
         const showAcknowledged = document.getElementById('showAcknowledged').checked;
@@ -341,19 +347,23 @@ async function refreshAlerts() {
             
             // Message column with badge
             const messageCell = document.createElement('td');
-            const badge = document.createElement('span');
-            badge.className = 'badge bg-info text-light cursor-pointer';
-            badge.style.cursor = 'pointer';
-            badge.textContent = 'View Message';
-            badge.onclick = () => showAlertMessage(alert.alert_message);
-            messageCell.appendChild(badge);
+            const viewButton = document.createElement('button');
+            viewButton.className = 'btn btn-sm btn-outline-info';
+            viewButton.innerHTML = '<i class="bi bi-info-circle"></i> View Message';
+            viewButton.onclick = () => showAlertMessage(alert.alert_message);
+            messageCell.appendChild(viewButton);
             row.appendChild(messageCell);
             
             // Status column
             const statusCell = document.createElement('td');
             const statusBadge = document.createElement('span');
-            statusBadge.className = `badge ${alert.acknowledged ? 'bg-secondary' : 'bg-warning'}`;
-            statusBadge.textContent = alert.acknowledged ? 'Acknowledged' : 'New';
+            if (alert.acknowledged) {
+                statusBadge.className = 'badge bg-secondary';
+                statusBadge.innerHTML = '<i class="bi bi-check-circle"></i> Acknowledged';
+            } else {
+                statusBadge.className = 'badge bg-warning';
+                statusBadge.innerHTML = '<i class="bi bi-exclamation-circle"></i> New';
+            }
             statusCell.appendChild(statusBadge);
             row.appendChild(statusCell);
             
@@ -363,7 +373,7 @@ async function refreshAlerts() {
                 const ackButton = document.createElement('button');
                 ackButton.className = 'btn btn-sm btn-outline-primary';
                 ackButton.textContent = 'Acknowledge';
-                ackButton.onclick = () => acknowledgeAlert(alert.id);
+                ackButton.onclick = () => acknowledgeAlert(alert.id, statusBadge, actionsCell);
                 actionsCell.appendChild(ackButton);
             }
             row.appendChild(actionsCell);
@@ -376,7 +386,7 @@ async function refreshAlerts() {
     }
 }
 
-async function acknowledgeAlert(alertId) {
+async function acknowledgeAlert(alertId, statusBadge, actionsCell) {
     try {
         const response = await fetch(`/acknowledge_alert/${alertId}`, {
             method: 'POST'
@@ -386,8 +396,14 @@ async function acknowledgeAlert(alertId) {
             throw new Error('Failed to acknowledge alert');
         }
         
+        // Update the status badge
+        statusBadge.className = 'badge bg-secondary';
+        statusBadge.innerHTML = '<i class="bi bi-check-circle"></i> Acknowledged';
+        
+        // Remove the acknowledge button
+        actionsCell.innerHTML = '';
+        
         showToast('Success', 'Alert acknowledged', 'success');
-        refreshAlerts();
     } catch (error) {
         console.error('Error acknowledging alert:', error);
         showToast('Error', 'Failed to acknowledge alert', 'error');
@@ -412,63 +428,51 @@ function formatAlertType(type) {
         .join(' ');
 }
 
+function formatClientInfo(clientInfo) {
+    if (!clientInfo) return '';
+    
+    try {
+        const info = typeof clientInfo === 'string' ? JSON.parse(clientInfo) : clientInfo;
+        return JSON.stringify(info, null, 2);
+    } catch (error) {
+        console.error('Error formatting client info:', error);
+        return String(clientInfo);
+    }
+}
+
 function showClientInfo(clientInfo) {
-    const modalBody = document.getElementById('clientInfoModalBody');
-    let content = '<div class="table-responsive"><table class="table table-sm">';
-
-    // Add IP address if available
-    content += `
-        <tr>
-            <th>IP Address</th>
-            <td>${clientInfo.ip || 'N/A'}</td>
-        </tr>`;
-
-    // Add timestamp if available
-    if (clientInfo.timestamp) {
-        content += `
-            <tr>
-                <th>Timestamp</th>
-                <td>${new Date(clientInfo.timestamp).toLocaleString()}</td>
-            </tr>`;
-    }
-
-    // Add headers if available
-    if (clientInfo.headers) {
-        content += `
-            <tr>
-                <th>Headers</th>
-                <td><pre class="mb-0"><code>${JSON.stringify(clientInfo.headers, null, 2)}</code></pre></td>
-            </tr>`;
-    }
-
-    // Add any additional info
-    Object.entries(clientInfo).forEach(([key, value]) => {
-        if (!['ip', 'timestamp', 'headers'].includes(key)) {
-            content += `
-                <tr>
-                    <th>${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</th>
-                    <td>${typeof value === 'object' ? JSON.stringify(value, null, 2) : value}</td>
-                </tr>`;
-        }
-    });
-
-    content += '</table></div>';
-    modalBody.innerHTML = content;
-
     const modal = new bootstrap.Modal(document.getElementById('clientInfoModal'));
+    const content = document.getElementById('clientInfoContent');
+    
+    try {
+        const formattedInfo = formatClientInfo(clientInfo);
+        content.innerHTML = `<pre class="mb-0">${formattedInfo}</pre>`;
+        content.classList.add('bg-light', 'p-3', 'rounded');
+        
+        // Add syntax highlighting if available
+        if (window.hljs) {
+            content.querySelector('pre').classList.add('json');
+            hljs.highlightElement(content.querySelector('pre'));
+        }
+    } catch (error) {
+        content.innerHTML = '<div class="alert alert-danger">Error displaying client info</div>';
+    }
+    
     modal.show();
 }
 
 // Update schedule help text when schedule input changes
 document.getElementById('schedule').addEventListener('input', function(e) {
-    const scheduleHelp = document.getElementById('scheduleHelp');
+    const scheduleHint = document.getElementById('scheduleHint');
     try {
-        const explanation = cronstrue.toString(e.target.value);
-        scheduleHelp.textContent = explanation;
-        scheduleHelp.style.color = '#6c757d';
+        const expression = e.target.value.trim();
+        if (expression) {
+            scheduleHint.textContent = cronstrue.toString(expression);
+        } else {
+            scheduleHint.textContent = '';
+        }
     } catch (error) {
-        scheduleHelp.textContent = 'Invalid cron expression';
-        scheduleHelp.style.color = '#dc3545';
+        scheduleHint.textContent = 'Invalid cron expression';
     }
 });
 
@@ -506,25 +510,49 @@ function toggleTheme(e) {
     }
 }
 
-// Initialize theme
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize theme and start refreshing data
+document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     document.getElementById('themeSwitch').addEventListener('change', toggleTheme);
     
-    // Initial load
-    refreshJobs();
-    refreshSimulations();
-    refreshRuns();
-    refreshAlerts();
+    // Initial load - with error handling
+    try {
+        await Promise.all([
+            refreshJobs().catch(error => console.error('Initial jobs refresh failed:', error)),
+            refreshRuns().catch(error => console.error('Initial runs refresh failed:', error)),
+            refreshAlerts().catch(error => console.error('Initial alerts refresh failed:', error))
+        ]);
+    } catch (error) {
+        console.error('Error during initial data load:', error);
+    }
     
     // Add event listener to new job form
     document.getElementById('newJobForm').addEventListener('submit', addJob);
     
-    // Set up periodic refresh
-    setInterval(refreshJobs, 30000);
-    setInterval(refreshSimulations, 15000);
-    setInterval(refreshRuns, 15000);
-    setInterval(refreshAlerts, 10000);
+    // Set up periodic refresh - each with its own error handling
+    setInterval(async () => {
+        try {
+            await refreshJobs();
+        } catch (error) {
+            console.error('Jobs refresh failed:', error);
+        }
+    }, 30000);
+    
+    setInterval(async () => {
+        try {
+            await refreshRuns();
+        } catch (error) {
+            console.error('Runs refresh failed:', error);
+        }
+    }, 15000);
+    
+    setInterval(async () => {
+        try {
+            await refreshAlerts();
+        } catch (error) {
+            console.error('Alerts refresh failed:', error);
+        }
+    }, 10000);
 });
 
 function showAlertMessage(message) {
@@ -771,5 +799,52 @@ async function endJob(jobId) {
     } catch (error) {
         showToast('Error', 'Failed to end job', 'error');
         console.error('Error ending job:', error);
+    }
+}
+
+// Simulation functions
+async function simulateJobStart() {
+    const jobId = document.getElementById('jobSelect').value;
+    const clientInfoText = document.getElementById('clientInfo').value;
+    
+    if (!jobId) {
+        showToast('Error', 'Please select a job', 'error');
+        return;
+    }
+    
+    try {
+        const clientInfo = clientInfoText ? JSON.parse(clientInfoText) : {};
+        await fetch(`/jobs/${jobId}/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ client_info: clientInfo })
+        });
+        
+        showToast('Success', 'Job started successfully');
+        refreshRuns();
+    } catch (error) {
+        showToast('Error', 'Failed to start job: ' + error.message, 'error');
+    }
+}
+
+async function simulateJobEnd() {
+    const jobId = document.getElementById('jobSelect').value;
+    
+    if (!jobId) {
+        showToast('Error', 'Please select a job', 'error');
+        return;
+    }
+    
+    try {
+        await fetch(`/jobs/${jobId}/end`, {
+            method: 'POST'
+        });
+        
+        showToast('Success', 'Job ended successfully');
+        refreshRuns();
+    } catch (error) {
+        showToast('Error', 'Failed to end job: ' + error.message, 'error');
     }
 }

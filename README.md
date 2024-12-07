@@ -1,6 +1,6 @@
-# Cron Job Monitor
+# Cronicle
 
-A web-based monitoring system for tracking and managing scheduled job executions and health checks.
+A modern, lightweight job monitoring system for tracking scheduled tasks and health checks.
 
 ## Features
 
@@ -145,7 +145,11 @@ curl "http://localhost:8000/job_runs?page=1&per_page=10"
 
 ## Development Setup
 
-1. Clone the repository
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/cronicle.git
+   cd cronicle
+   ```
 2. Install dependencies:
    ```bash
    pip install -r requirements.txt
@@ -154,7 +158,7 @@ curl "http://localhost:8000/job_runs?page=1&per_page=10"
    ```bash
    python app.py
    ```
-4. Access the application at `http://localhost:8000`
+4. Access Cronicle at `http://localhost:8000`
 
 ## Job Configuration
 
@@ -208,7 +212,8 @@ Each job run captures:
 ## Features in Development
 
 1. Authentication system
-2. Advanced reporting
+2. Advanced reporting and analytics
 3. Email notifications
 4. Job dependencies
 5. Distributed monitoring
+6. API client libraries (Python, Node.js)
