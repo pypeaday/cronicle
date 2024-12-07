@@ -129,6 +129,11 @@ async def check_job_issues():
 # Startup and shutdown events manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ensure data directory exists and initialize database
+    data_dir = Path(__file__).parent / "data"
+    data_dir.mkdir(exist_ok=True)
+    db.init_db()
+    
     # Start background task
     task = asyncio.create_task(check_job_issues())
     yield
@@ -144,11 +149,6 @@ app = FastAPI(
     description="A service to monitor and track cron jobs",
     lifespan=lifespan
 )
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    db.init_db(force_recreate=False)
 
 # Mount the static directory
 static_path = Path(__file__).parent / "static"

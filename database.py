@@ -12,7 +12,17 @@ class AlertType(Enum):
     MISSED_JOB = "missed_job"
     LONG_RUNNING = "long_running"
 
-DATABASE_FILE = Path(__file__).parent / "jobs.db"
+# Get the absolute path to the data directory
+if os.environ.get('DOCKER_ENV') == 'true':
+    # In Docker, use the mounted volume path
+    data_dir = Path('/app/data')
+else:
+    # On host, use relative path
+    data_dir = Path(__file__).parent / "data"
+
+data_dir.mkdir(exist_ok=True)
+
+DATABASE_FILE = data_dir / "jobs.db"
 
 def to_utc(dt: Optional[datetime]) -> Optional[datetime]:
     """Convert datetime to UTC or return None"""
