@@ -126,7 +126,8 @@
                         <div class="row">
                             <div class="col-md-4 mb-3">
                                 <label for="tolerance" class="form-label">Tolerance (minutes)</label>
-                                <input type="number" class="form-control" id="tolerance" required>
+                                <input type="number" class="form-control" id="tolerance" name="tolerance" required min="0"
+                                    title="The maximum number of minutes a job can be delayed from its scheduled time before being marked as missed. For example, if a job is scheduled for 2:00 PM with a tolerance of 5 minutes, it will be marked as missed if it hasn't started by 2:05 PM.">
                             </div>
                             <div class="col-md-4 mb-3">
                                 <label for="maxRuntime" class="form-label">Max Runtime (minutes)</label>
