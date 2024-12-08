@@ -621,7 +621,17 @@ def update_job_pause_status(job_id: str, paused: bool) -> None:
             (paused, job_id)
         )
 
-def add_job(job_id: str, schedule: str, tolerance_minutes: int, max_runtime_minutes: int = None):
+def add_job(job_id: str, schedule: str, tolerance_minutes: int = 0, max_runtime_minutes: int = None):
+    """Add or update a job configuration.
+    
+    Args:
+        job_id: Unique identifier for the job
+        schedule: Cron expression for the job schedule
+        tolerance_minutes: Number of minutes to wait before marking a job as missed (default: 0)
+        max_runtime_minutes: Maximum runtime in minutes before marking as long-running (optional)
+    """
+    if tolerance_minutes is None:
+        tolerance_minutes = 0
     needs_end_signal = max_runtime_minutes is not None and max_runtime_minutes > 0
     with get_db() as db:
         db.execute('''

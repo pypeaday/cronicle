@@ -66,6 +66,10 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="#">Cronicle</a>
             <div class="d-flex align-items-center">
+                <a href="#" class="simulation-nav-link me-3" title="Job Simulation">
+                    <i class="bi bi-play-circle"></i>
+                    <span class="d-none d-sm-inline">Simulation</span>
+                </a>
                 <div class="theme-switch-wrapper me-3">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="themeSwitch">
@@ -76,198 +80,203 @@
         </div>
     </nav>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="card">
-            <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">Job Simulation</h5>
-                    <button class="btn btn-sm btn-outline-primary" onclick="refreshSimulations()">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <form id="simulationForm" class="mb-3">
-                    <div class="mb-3">
-                        <label for="jobSelect" class="form-label">Select Job</label>
-                        <select class="form-select" id="jobSelect" required>
-                            <option value="" selected disabled>Choose a job...</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="clientInfo" class="form-label">Client Info (optional)</label>
-                        <textarea class="form-control" id="clientInfo" rows="3"
-                            placeholder='{"hostname": "worker-1"}'></textarea>
-                    </div>
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-primary" onclick="simulateJobStart()">Start Job</button>
-                        <button type="button" class="btn btn-success" onclick="simulateJobEnd()">End Job</button>
-                    </div>
-                </form>
-                <div class="table-responsive mt-3">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Job ID</th>
-                                <th>Last Start</th>
-                                <th>Last End</th>
-                                <th>Duration</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="simulationsList">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Content -->
-    <div class="main-content">
-        <div class="container mt-3">
-            <!-- Add New Job Form -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Add New Job</h5>
-                </div>
-                <div class="card-body">
-                    <form id="jobForm" onsubmit="addJob(event)">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="jobId" class="form-label">Job ID</label>
-                                <input type="text" class="form-control" id="jobId" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="schedule" class="form-label">Schedule (Cron Expression)</label>
-                                <input type="text" class="form-control" id="schedule" required>
-                                <div class="form-text" id="scheduleHint"></div>
-                            </div>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-8">
+                <!-- Main content -->
+                <div class="container mt-3">
+                    <!-- Add New Job Form -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Add New Job</h5>
                         </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label for="tolerance" class="form-label">Tolerance (minutes)</label>
-                                <input type="number" class="form-control" id="tolerance" name="tolerance" required min="0"
-                                    title="The maximum number of minutes a job can be delayed from its scheduled time before being marked as missed. For example, if a job is scheduled for 2:00 PM with a tolerance of 5 minutes, it will be marked as missed if it hasn't started by 2:05 PM.">
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label for="maxRuntime" class="form-label">Max Runtime (minutes)</label>
-                                <input type="number" class="form-control" id="maxRuntime"
-                                    placeholder="Leave empty for heartbeat">
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label d-block">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary w-100">Add Job</button>
-                            </div>
+                        <div class="card-body">
+                            <form id="newJobForm" onsubmit="addJob(event)">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="jobId" class="form-label">Job ID</label>
+                                        <input type="text" class="form-control" id="jobId" required>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="schedule" class="form-label">Schedule (Cron Expression)</label>
+                                        <input type="text" class="form-control" id="schedule" required>
+                                        <div class="form-text" id="scheduleHint"></div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="tolerance" class="form-label">Tolerance (minutes)</label>
+                                        <input type="number" class="form-control" id="tolerance" name="tolerance" required min="0"
+                                            title="The maximum number of minutes a job can be delayed from its scheduled time before being marked as missed. For example, if a job is scheduled for 2:00 PM with a tolerance of 5 minutes, it will be marked as missed if it hasn't started by 2:05 PM.">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="maxRuntime" class="form-label">Max Runtime (minutes)</label>
+                                        <input type="number" class="form-control" id="maxRuntime"
+                                            placeholder="Leave empty for heartbeat">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label class="form-label d-block">&nbsp;</label>
+                                        <button type="submit" class="btn btn-primary w-100">Add Job</button>
+                                    </div>
+                                </div>
+                            </form>
                         </div>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Configured Jobs -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">Configured Jobs</h5>
-                        <button class="btn btn-sm btn-outline-primary" onclick="refreshJobs()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
                     </div>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Job ID</th>
-                                    <th>Schedule</th>
-                                    <th>Tolerance</th>
-                                    <th>Max Runtime</th>
-                                    <th>Type</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="jobsList">
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Job Runs -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">Job Runs</h5>
-                        <div>
-                            <span class="me-3">
-                                Showing <span id="runsStartRange">0</span> - <span id="runsEndRange">0</span>
-                                of <span id="totalRuns">0</span>
-                            </span>
-                            <div class="btn-group">
-                                <button class="btn btn-sm btn-outline-secondary" onclick="previousRunsPage()">
-                                    <i class="bi bi-chevron-left"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="nextRunsPage()">
-                                    <i class="bi bi-chevron-right"></i>
+                    <!-- Configured Jobs -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Configured Jobs</h5>
+                                <button class="btn btn-sm btn-outline-primary" onclick="refreshJobs()">
+                                    <i class="bi bi-arrow-clockwise"></i> Refresh
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Job ID</th>
-                                    <th>Start Time</th>
-                                    <th>End Time</th>
-                                    <th>Duration</th>
-                                    <th>Client Info</th>
-                                </tr>
-                            </thead>
-                            <tbody id="runsList">
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Alerts -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">Alerts</h5>
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="showAcknowledged">
-                                <label class="form-check-label" for="showAcknowledged">Show Acknowledged</label>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Schedule</th>
+                                            <th>Tolerance</th>
+                                            <th>Max Runtime</th>
+                                            <th>Type</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="jobsList">
+                                    </tbody>
+                                </table>
                             </div>
-                            <button class="btn btn-sm btn-outline-primary" onclick="refreshAlerts()">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
-                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Job Runs -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Job Runs</h5>
+                                <div>
+                                    <span class="me-3">
+                                        Showing <span id="runsStartRange">0</span> - <span id="runsEndRange">0</span>
+                                        of <span id="totalRuns">0</span>
+                                    </span>
+                                    <div class="btn-group">
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="previousRunsPage()">
+                                            <i class="bi bi-chevron-left"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="nextRunsPage()">
+                                            <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Start Time</th>
+                                            <th>End Time</th>
+                                            <th>Duration</th>
+                                            <th>Client Info</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="runsList">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Alerts -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Alerts</h5>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="showAcknowledged">
+                                        <label class="form-check-label" for="showAcknowledged">Show Acknowledged</label>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshAlerts()">
+                                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Type</th>
+                                            <th>Time</th>
+                                            <th>Message</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="alertsList">
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Job ID</th>
-                                    <th>Type</th>
-                                    <th>Time</th>
-                                    <th>Message</th>
-                                    <th>Status</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="alertsList">
-                            </tbody>
-                        </table>
+            </div>
+            
+            <div class="col-md-4">
+                <!-- Job Simulation Section -->
+                <div class="job-simulation-section mt-3">
+                    <div class="job-simulation-card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Job Simulation</h5>
+                                <button class="btn btn-sm btn-outline-primary" onclick="refreshSimulations()">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <form id="jobSimulationForm" class="mb-3">
+                                <div class="mb-3">
+                                    <label for="jobSelect" class="form-label">Select Job</label>
+                                    <select class="form-select" id="jobSelect" required>
+                                        <option value="" selected disabled>Choose a job...</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="clientInfo" class="form-label">Client Info (optional)</label>
+                                    <textarea class="form-control" id="clientInfo" rows="3" placeholder='{"hostname": "worker-1"}'></textarea>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="startJobBtn" onclick="simulateJobStart(); return false;">Start Job</button>
+                                    <button type="button" class="btn btn-danger" id="endJobBtn" disabled>End Job</button>
+                                </div>
+                            </form>
+                            <div class="table-responsive mt-3">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Job ID</th>
+                                            <th>Last Start</th>
+                                            <th>Last End</th>
+                                            <th>Duration</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="simulationsList">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

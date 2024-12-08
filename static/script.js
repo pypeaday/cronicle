@@ -538,8 +538,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Error during initial data load:', error);
     }
     
-    // Add event listener to new job form
-    document.getElementById('newJobForm').addEventListener('submit', addJob);
+    // Add event listeners
+    const newJobForm = document.getElementById('newJobForm');
+    if (newJobForm) {
+        newJobForm.addEventListener('submit', addJob);
+    } else {
+        console.error('New job form not found');
+    }
+    
+    // Add event listener to simulation form
+    document.getElementById('simulationForm').addEventListener('submit', (event) => {
+        event.preventDefault();
+        simulateJobStart();
+    });
     
     // Set up periodic refresh - each with its own error handling
     setInterval(async () => {
@@ -804,6 +815,7 @@ async function endJob(jobId) {
 
 // Simulation functions
 async function simulateJobStart() {
+    console.log('Starting job simulation...');
     const jobId = document.getElementById('jobSelect').value;
     const clientInfoText = document.getElementById('clientInfo').value;
     
@@ -813,8 +825,9 @@ async function simulateJobStart() {
     }
     
     try {
+        console.log('Making API call to start job:', jobId);
         const clientInfo = clientInfoText ? JSON.parse(clientInfoText) : {};
-        await fetch(`/jobs/${jobId}/start`, {
+        const response = await fetch(`/jobs/${jobId}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -822,9 +835,19 @@ async function simulateJobStart() {
             body: JSON.stringify({ client_info: clientInfo })
         });
         
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to start job');
+        }
+        
+        console.log('Job started successfully');
         showToast('Success', 'Job started successfully');
-        refreshRuns();
+        await Promise.all([
+            refreshSimulations(),
+            refreshRuns()
+        ]);
     } catch (error) {
+        console.error('Error starting job:', error);
         showToast('Error', 'Failed to start job: ' + error.message, 'error');
     }
 }

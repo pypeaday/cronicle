@@ -29,6 +29,10 @@ async def check_job_issues():
                 if job.get('paused', False):
                     continue
                 
+                # Skip heartbeat jobs for missed job checks
+                if not job.get('max_runtime_minutes'):
+                    continue
+                
                 # Handle sub-minute schedules
                 if ' * *' in job['schedule']:  # Check if it's a sub-minute schedule
                     seconds = int(job['schedule'].split()[0].strip('*/'))
@@ -43,7 +47,10 @@ async def check_job_issues():
                             expected_time = last_run_time + timedelta(seconds=seconds)
                         
                         # Calculate the tolerance window
-                        tolerance = timedelta(minutes=job['tolerance_minutes'])
+                        tolerance_minutes = job.get('tolerance_minutes', 0)  # Default to 0 if not set
+                        if tolerance_minutes is None:
+                            tolerance_minutes = 0
+                        tolerance = timedelta(minutes=tolerance_minutes)
                         window_end = expected_time + tolerance
                         
                         # If we're past the window end and there's no run recorded
@@ -76,7 +83,10 @@ async def check_job_issues():
                 expected_time = to_utc(cron.get_prev(datetime))
                 
                 # Calculate the tolerance window
-                tolerance = timedelta(minutes=job['tolerance_minutes'])
+                tolerance_minutes = job.get('tolerance_minutes', 0)  # Default to 0 if not set
+                if tolerance_minutes is None:
+                    tolerance_minutes = 0
+                tolerance = timedelta(minutes=tolerance_minutes)
                 window_end = expected_time + tolerance
                 
                 # If we're past the window end and there's no run recorded
@@ -101,6 +111,10 @@ async def check_job_issues():
             # Check for long-running jobs
             running_jobs = db.get_running_jobs()
             for job in running_jobs:
+                # Skip heartbeat jobs for long-running checks
+                if not job.get('max_runtime_minutes'):
+                    continue
+                    
                 start_time = job['start_time']
                 runtime = current_time - start_time
                 max_runtime = timedelta(minutes=job['max_runtime_minutes'])
