@@ -582,16 +582,20 @@ def record_job_end(job_id: str) -> None:
     """Record a job end in both job_configs and job_runs tables"""
     now = datetime.now(pytz.utc)
     with get_db() as db:
-        # Get the last start time from job_runs
-        last_run = db.execute('''
+        # Get all unended runs for this job
+        unended_runs = db.execute('''
             SELECT id, start_time 
             FROM job_runs 
             WHERE job_id = ? AND end_time IS NULL
-            ORDER BY start_time DESC LIMIT 1
-        ''', (job_id,)).fetchone()
+            ORDER BY start_time ASC
+        ''', (job_id,)).fetchall()
         
-        if last_run:
-            run_id, start_time = last_run
+        if not unended_runs:
+            return
+        
+        # End all unended runs
+        for run in unended_runs:
+            run_id, start_time = run
             start_time = datetime.fromisoformat(start_time) if isinstance(start_time, str) else start_time
             duration = (now - start_time).total_seconds() / 60  # Convert to minutes
             
@@ -601,13 +605,13 @@ def record_job_end(job_id: str) -> None:
                 SET end_time = ?, duration = ?
                 WHERE id = ?
             ''', (now, duration, run_id))
-            
-            # Update job_configs
-            db.execute('''
-                UPDATE job_configs 
-                SET last_end = ?, duration = ?
-                WHERE job_id = ?
-            ''', (now, duration, job_id))
+        
+        # Update job_configs with the most recent end
+        db.execute('''
+            UPDATE job_configs 
+            SET last_end = ?, duration = ?
+            WHERE job_id = ?
+        ''', (now, duration, job_id))
 
 def update_job_pause_status(job_id: str, paused: bool) -> None:
     """Update the pause status of a job"""

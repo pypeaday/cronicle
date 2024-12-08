@@ -207,6 +207,9 @@ class JobConfig(BaseModel):
             raise ValueError("For monitored jobs, runtime must be between 1 and 10080 minutes")
         return v
 
+class JobMetadata(BaseModel):
+    metadata: Optional[Dict] = Field(default=None, description="Custom metadata for the job run")
+
 def format_time_with_cst(dt: datetime) -> str:
     """Format time in both UTC and CST"""
     utc_str = dt.strftime('%I:%M %p %Z')
@@ -429,7 +432,7 @@ async def get_html():
     return HTMLResponse(content=html_path.read_text())
 
 @app.post("/jobs/{job_id}/start")
-async def start_job(job_id: str, request: Request):
+async def start_job(job_id: str, request: Request, metadata: Optional[JobMetadata] = None):
     try:
         job = db.get_job_config(job_id)
         if not job:
@@ -439,11 +442,11 @@ async def start_job(job_id: str, request: Request):
             raise HTTPException(status_code=400, detail=f"Job {job_id} is paused")
 
         # Collect client information
-        client_info = {
-            'ip': request.client.host,
-            'headers': dict(request.headers),
-            'timestamp': datetime.now().isoformat()
-        }
+        client_info = get_client_info(request)
+        
+        # Add custom metadata if provided
+        if metadata and metadata.metadata:
+            client_info['custom_metadata'] = metadata.metadata
         
         # Record the job start
         db.record_job_start(job_id, client_info)

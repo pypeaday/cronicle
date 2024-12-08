@@ -220,9 +220,17 @@ async function refreshSimulations() {
         const simulationsList = document.getElementById('simulationsList');
         simulationsList.innerHTML = '';
         
-        for (const job of jobs) {
+        // Get the selected job ID
+        const jobSelect = document.getElementById('jobSelect');
+        const selectedJobId = jobSelect ? jobSelect.value : null;
+        
+        // Only process jobs that match the selected ID
+        const jobsToShow = selectedJobId ? jobs.filter(job => job.job_id === selectedJobId) : [];
+        
+        for (const job of jobsToShow) {
             const row = document.createElement('tr');
             const isHealthCheck = !job.max_runtime_minutes;
+            const isRunning = job.last_start_time && (!job.last_end_time || new Date(job.last_start_time) > new Date(job.last_end_time));
             
             // Job ID column
             const jobIdCell = document.createElement('td');
@@ -269,7 +277,7 @@ async function refreshSimulations() {
                     '<span class="badge bg-success">Ready</span>' : 
                     '<span class="badge bg-secondary">Waiting</span>';
             } else {
-                status = job.last_start_time && (!job.last_end_time || new Date(job.last_start_time) > new Date(job.last_end_time)) ? 
+                status = isRunning ? 
                     '<span class="badge bg-primary">Running</span>' : 
                     '<span class="badge bg-secondary">Not Running</span>';
             }
@@ -279,7 +287,7 @@ async function refreshSimulations() {
             // Actions column
             const actionsCell = document.createElement('td');
             const startBtn = document.createElement('button');
-            startBtn.className = 'btn btn-sm btn-success me-1';
+            startBtn.className = 'btn btn-sm btn-outline-success me-1';
             if (isHealthCheck) {
                 startBtn.innerHTML = '<i class="bi bi-check-circle"></i>';
                 startBtn.title = 'Simulate Health Check';
@@ -287,18 +295,21 @@ async function refreshSimulations() {
                 startBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
                 startBtn.title = 'Start Job';
             }
-            startBtn.onclick = () => startJob(job.job_id);
-            startBtn.disabled = (status.includes('Running') && !isHealthCheck) || job.paused;
+            startBtn.onclick = () => simulateJobStart();
+            startBtn.disabled = job.paused || (isRunning && !isHealthCheck);
             actionsCell.appendChild(startBtn);
             
-            // Only show end button for monitored jobs
+            // Only show end button for monitored jobs that are running
             if (!isHealthCheck) {
                 const endBtn = document.createElement('button');
-                endBtn.className = 'btn btn-sm btn-danger me-1';
+                endBtn.className = 'btn btn-sm btn-outline-danger me-1';
                 endBtn.innerHTML = '<i class="bi bi-stop-fill"></i>';
                 endBtn.title = 'End Job';
-                endBtn.onclick = () => endJob(job.job_id);
-                endBtn.disabled = !status.includes('Running') || job.paused;
+                endBtn.onclick = () => {
+                    console.log('Ending job from table:', job.job_id);
+                    endJob(job.job_id);
+                };
+                endBtn.disabled = !isRunning || job.paused;
                 actionsCell.appendChild(endBtn);
             }
             
@@ -310,6 +321,14 @@ async function refreshSimulations() {
         showToast('Error', 'Failed to refresh simulations: ' + error.message, 'error');
     }
 }
+
+// Add event listener for job selection change
+document.addEventListener('DOMContentLoaded', () => {
+    const jobSelect = document.getElementById('jobSelect');
+    if (jobSelect) {
+        jobSelect.addEventListener('change', refreshSimulations);
+    }
+});
 
 async function refreshAlerts() {
     try {
@@ -714,12 +733,25 @@ async function addJob(event) {
 
 // Start job
 async function startJob(jobId) {
+    const clientInfoText = document.getElementById('clientInfo').value;
+    let metadata = null;
+    
+    if (clientInfoText.trim()) {
+        try {
+            metadata = { metadata: JSON.parse(clientInfoText) };
+        } catch (e) {
+            alert('Invalid JSON in client info. Please check the format.');
+            return;
+        }
+    }
+
     try {
         const response = await fetch(`/jobs/${jobId}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            body: metadata ? JSON.stringify(metadata) : null
         });
         const data = await response.json();
         
@@ -738,8 +770,8 @@ async function startJob(jobId) {
             showToast('Error', data.detail || 'Failed to start job', 'error');
         }
     } catch (error) {
-        showToast('Error', 'Failed to start job', 'error');
         console.error('Error starting job:', error);
+        showToast('Error', 'Failed to start job', 'error');
     }
 }
 
@@ -787,6 +819,7 @@ async function resumeJob(jobId) {
 
 // End job
 async function endJob(jobId) {
+    console.log('Attempting to end job:', jobId);
     try {
         const response = await fetch(`/jobs/${jobId}/end`, {
             method: 'POST',
@@ -795,21 +828,29 @@ async function endJob(jobId) {
             }
         });
         
-        if (response.ok) {
-            showToast('Success', 'Job ended successfully');
-            // Refresh all relevant tables
-            await Promise.all([
-                refreshSimulations(),
-                refreshRuns(),
-                refreshAlerts()
-            ]);
-        } else {
+        if (!response.ok) {
             const error = await response.json();
-            showToast('Error', error.detail || 'Failed to end job', 'error');
+            throw new Error(error.detail || 'Failed to end job');
+        }
+        
+        console.log('Job ended successfully:', jobId);
+        showToast('Success', 'Job ended successfully');
+        
+        // Refresh all relevant tables
+        await Promise.all([
+            refreshSimulations(),
+            refreshRuns(),
+            refreshAlerts()
+        ]);
+        
+        // Disable end button after successful end
+        const endJobBtn = document.getElementById('endJobBtn');
+        if (endJobBtn) {
+            endJobBtn.disabled = true;
         }
     } catch (error) {
-        showToast('Error', 'Failed to end job', 'error');
         console.error('Error ending job:', error);
+        showToast('Error', 'Failed to end job: ' + error.message, 'error');
     }
 }
 
@@ -826,13 +867,13 @@ async function simulateJobStart() {
     
     try {
         console.log('Making API call to start job:', jobId);
-        const clientInfo = clientInfoText ? JSON.parse(clientInfoText) : {};
+        const metadata = clientInfoText ? { metadata: JSON.parse(clientInfoText) } : null;
         const response = await fetch(`/jobs/${jobId}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ client_info: clientInfo })
+            body: metadata ? JSON.stringify(metadata) : null
         });
         
         if (!response.ok) {
