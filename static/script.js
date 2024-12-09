@@ -49,11 +49,8 @@ async function refreshJobs() {
         
         // Update jobs table
         const jobsList = document.getElementById('jobsList');
+        const currentScrollPos = window.scrollY;
         jobsList.innerHTML = '';
-        
-        // Update simulation dropdown
-        const jobSelect = document.getElementById('jobSelect');
-        jobSelect.innerHTML = '<option value="" selected disabled>Choose a job...</option>';
         
         jobs.forEach(job => {
             const isHeartbeat = !job.max_runtime_minutes;
@@ -70,34 +67,50 @@ async function refreshJobs() {
                 <td class="text-center">${job.tolerance_minutes}</td>
                 <td class="text-center">${isHeartbeat ? 'N/A' : job.max_runtime_minutes}</td>
                 <td>
-                    <span class="badge ${isHeartbeat ? 'bg-secondary' : 'bg-primary'}">${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</span>
-                    ${job.paused ? '<span class="badge bg-warning ms-1">Paused</span>' : ''}
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge ${isHeartbeat ? 'bg-secondary' : 'bg-primary'}">${isHeartbeat ? 'Heartbeat' : 'Timed Job'}</span>
+                        ${job.paused ? '<span class="badge bg-warning">Paused</span>' : ''}
+                        ${job.last_start_time && (!job.last_end_time || new Date(job.last_start_time) > new Date(job.last_end_time)) ? 
+                            '<div class="spinner-border spinner-border-sm text-primary" role="status"><span class="visually-hidden">Running...</span></div>' : 
+                            ''}
+                    </div>
                 </td>
                 <td>
-                    <div class="d-flex gap-2">
-                        ${!job.paused ? 
-                            `<button class="btn btn-sm btn-outline-warning" onclick="pauseJob('${job.job_id}')" title="Pause Monitoring">
-                                <i class="bi bi-pause-fill"></i>
-                            </button>` :
-                            `<button class="btn btn-sm btn-outline-success" onclick="resumeJob('${job.job_id}')" title="Resume Monitoring">
-                                <i class="bi bi-play-fill"></i>
-                            </button>`
-                        }
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteJob('${job.job_id}')" title="Delete Job">
+                    <div class="job-actions">
+                        <button class="btn btn-sm btn-outline-${job.paused ? 'success' : 'warning'}" 
+                                onclick="${job.paused ? 'resumeJob' : 'pauseJob'}('${job.job_id}', event)" 
+                                title="${job.paused ? 'Resume' : 'Pause'} Monitoring">
+                            <i class="bi bi-${job.paused ? 'play' : 'pause'}-fill"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" 
+                                onclick="startJob('${job.job_id}', event)" 
+                                title="Start Job">
+                            <i class="bi bi-play-circle"></i>
+                        </button>
+                        ${!isHeartbeat ? 
+                            `<button class="btn btn-sm btn-outline-secondary" 
+                                    onclick="endJob('${job.job_id}', event)" 
+                                    title="End Job">
+                                <i class="bi bi-stop-circle"></i>
+                            </button>` : 
+                            `<div class="btn btn-sm invisible" style="pointer-events: none;">
+                                <i class="bi bi-stop-circle"></i>
+                            </div>`}
+                        <button class="btn btn-sm btn-outline-danger" 
+                                onclick="deleteJob('${job.job_id}', event)" 
+                                title="Delete Job">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 </td>
             `;
             jobsList.appendChild(row);
-            
-            // Add to simulation dropdown
-            const option = document.createElement('option');
-            option.value = job.job_id;
-            option.textContent = `${job.job_id} (${isHeartbeat ? 'Heartbeat' : 'Timed Job'})`;
-            jobSelect.appendChild(option);
         });
+        
+        // Restore scroll position
+        window.scrollTo(0, currentScrollPos);
     } catch (error) {
+        console.error('Error in refreshJobs:', error);
         showToast('Error', 'Failed to refresh jobs: ' + error.message, 'error');
     }
 }
@@ -211,401 +224,119 @@ function nextRunsPage() {
     }
 }
 
-// Refresh simulations list
-async function refreshSimulations() {
+// Job Control Functions
+async function startJob(jobId, event) {
+    if (event) event.preventDefault();
     try {
-        const response = await fetch('/jobs');
-        const jobs = await response.json();
-        
-        const simulationsList = document.getElementById('simulationsList');
-        simulationsList.innerHTML = '';
-        
-        // Get the selected job ID
-        const jobSelect = document.getElementById('jobSelect');
-        const selectedJobId = jobSelect ? jobSelect.value : null;
-        
-        // Only process jobs that match the selected ID
-        const jobsToShow = selectedJobId ? jobs.filter(job => job.job_id === selectedJobId) : [];
-        
-        for (const job of jobsToShow) {
-            const row = document.createElement('tr');
-            const isHealthCheck = !job.max_runtime_minutes;
-            const isRunning = job.last_start_time && (!job.last_end_time || new Date(job.last_start_time) > new Date(job.last_end_time));
-            
-            // Job ID column
-            const jobIdCell = document.createElement('td');
-            jobIdCell.textContent = job.job_id;
-            row.appendChild(jobIdCell);
-            
-            // Last Start column
-            const lastStartCell = document.createElement('td');
-            if (isHealthCheck) {
-                lastStartCell.textContent = job.last_start_time ? 'Last Check: ' + new Date(job.last_start_time).toLocaleString() : 'Never Checked';
-            } else {
-                lastStartCell.textContent = job.last_start_time ? new Date(job.last_start_time).toLocaleString() : 'Never';
-            }
-            row.appendChild(lastStartCell);
-            
-            // Last End column
-            const lastEndCell = document.createElement('td');
-            if (isHealthCheck) {
-                lastEndCell.innerHTML = '<em class="text-muted">N/A</em>';
-            } else {
-                lastEndCell.textContent = job.last_end_time ? new Date(job.last_end_time).toLocaleString() : 'Never';
-            }
-            row.appendChild(lastEndCell);
-            
-            // Duration column
-            const durationCell = document.createElement('td');
-            if (isHealthCheck) {
-                durationCell.innerHTML = '<em class="text-muted">N/A</em>';
-            } else if (job.last_start_time && job.last_end_time) {
-                const duration = (new Date(job.last_end_time) - new Date(job.last_start_time)) / (1000 * 60);
-                durationCell.textContent = formatDuration(duration);
-            } else {
-                durationCell.textContent = '-';
-            }
-            row.appendChild(durationCell);
-            
-            // Status column
-            const statusCell = document.createElement('td');
-            let status;
-            if (job.paused) {
-                status = '<span class="badge bg-warning">Paused</span>';
-            } else if (isHealthCheck) {
-                status = job.last_start_time ? 
-                    '<span class="badge bg-success">Ready</span>' : 
-                    '<span class="badge bg-secondary">Waiting</span>';
-            } else {
-                status = isRunning ? 
-                    '<span class="badge bg-primary">Running</span>' : 
-                    '<span class="badge bg-secondary">Not Running</span>';
-            }
-            statusCell.innerHTML = status;
-            row.appendChild(statusCell);
-            
-            // Actions column
-            const actionsCell = document.createElement('td');
-            const startBtn = document.createElement('button');
-            startBtn.className = 'btn btn-sm btn-outline-success me-1';
-            if (isHealthCheck) {
-                startBtn.innerHTML = '<i class="bi bi-check-circle"></i>';
-                startBtn.title = 'Simulate Health Check';
-            } else {
-                startBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
-                startBtn.title = 'Start Job';
-            }
-            startBtn.onclick = () => simulateJobStart();
-            startBtn.disabled = job.paused || (isRunning && !isHealthCheck);
-            actionsCell.appendChild(startBtn);
-            
-            // Only show end button for monitored jobs that are running
-            if (!isHealthCheck) {
-                const endBtn = document.createElement('button');
-                endBtn.className = 'btn btn-sm btn-outline-danger me-1';
-                endBtn.innerHTML = '<i class="bi bi-stop-fill"></i>';
-                endBtn.title = 'End Job';
-                endBtn.onclick = () => {
-                    console.log('Ending job from table:', job.job_id);
-                    endJob(job.job_id);
-                };
-                endBtn.disabled = !isRunning || job.paused;
-                actionsCell.appendChild(endBtn);
-            }
-            
-            row.appendChild(actionsCell);
-            simulationsList.appendChild(row);
+        const response = await fetch(`/jobs/${jobId}/start`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to start job: ${response.statusText}`);
         }
+
+        const data = await response.json();
+        showToast('Success', `Started job ${jobId}`, 'success');
+        
+        if (data.alert) {
+            showToast('Warning', data.alert, 'warning');
+        }
+
+        // Immediate refresh
+        await Promise.all([
+            refreshJobs(),
+            refreshRuns()
+        ]).catch(error => {
+            console.error('Error refreshing after job start:', error);
+        });
+
     } catch (error) {
-        console.error('Error refreshing simulations:', error);
-        showToast('Error', 'Failed to refresh simulations: ' + error.message, 'error');
+        console.error('Error starting job:', error);
+        showToast('Error', error.message, 'error');
     }
 }
 
-// Add event listener for job selection change
-document.addEventListener('DOMContentLoaded', () => {
-    const jobSelect = document.getElementById('jobSelect');
-    if (jobSelect) {
-        jobSelect.addEventListener('change', refreshSimulations);
-    }
-});
-
-async function refreshAlerts() {
+async function endJob(jobId, event) {
+    if (event) event.preventDefault();
     try {
-        const showAcknowledged = document.getElementById('showAcknowledged').checked;
-        const response = await fetch(`/job_alerts?include_acknowledged=${showAcknowledged}`);
-        const alerts = await response.json();
-        
-        // Group alerts by job_id to count duplicates
-        const alertGroups = {};
-        alerts.forEach(alert => {
-            const key = alert.job_id;
-            if (!alertGroups[key]) {
-                alertGroups[key] = {
-                    latest: alert,
-                    count: 1
-                };
-            } else {
-                alertGroups[key].count++;
-                if (new Date(alert.detected_time) > new Date(alertGroups[key].latest.detected_time)) {
-                    alertGroups[key].latest = alert;
-                }
-            }
+        const response = await fetch(`/jobs/${jobId}/end`, {
+            method: 'POST'
         });
+
+        if (!response.ok) {
+            throw new Error(`Failed to end job: ${response.statusText}`);
+        }
+
+        showToast('Success', `Ended job ${jobId}`, 'success');
         
-        const alertsList = document.getElementById('alertsList');
-        alertsList.innerHTML = '';
-        
-        Object.values(alertGroups).forEach(group => {
-            const alert = group.latest;
-            const row = document.createElement('tr');
-            
-            // Job ID column
-            const jobIdCell = document.createElement('td');
-            jobIdCell.textContent = alert.job_id;
-            if (group.count > 1) {
-                const countBadge = document.createElement('span');
-                countBadge.className = 'badge bg-secondary ms-2';
-                countBadge.textContent = `${group.count}x`;
-                jobIdCell.appendChild(countBadge);
-            }
-            row.appendChild(jobIdCell);
-            
-            // Timestamp column
-            const timestampCell = document.createElement('td');
-            timestampCell.textContent = new Date(alert.detected_time).toLocaleString();
-            row.appendChild(timestampCell);
-            
-            // Message column with badge
-            const messageCell = document.createElement('td');
-            const viewButton = document.createElement('button');
-            viewButton.className = 'btn btn-sm btn-outline-info';
-            viewButton.innerHTML = '<i class="bi bi-info-circle"></i> View Message';
-            viewButton.onclick = () => showAlertMessage(alert.alert_message);
-            messageCell.appendChild(viewButton);
-            row.appendChild(messageCell);
-            
-            // Status column
-            const statusCell = document.createElement('td');
-            const statusBadge = document.createElement('span');
-            if (alert.acknowledged) {
-                statusBadge.className = 'badge bg-secondary';
-                statusBadge.innerHTML = '<i class="bi bi-check-circle"></i> Acknowledged';
-            } else {
-                statusBadge.className = 'badge bg-warning';
-                statusBadge.innerHTML = '<i class="bi bi-exclamation-circle"></i> New';
-            }
-            statusCell.appendChild(statusBadge);
-            row.appendChild(statusCell);
-            
-            // Actions column
-            const actionsCell = document.createElement('td');
-            if (!alert.acknowledged) {
-                const ackButton = document.createElement('button');
-                ackButton.className = 'btn btn-sm btn-outline-primary';
-                ackButton.textContent = 'Acknowledge';
-                ackButton.onclick = () => acknowledgeAlert(alert.id, statusBadge, actionsCell);
-                actionsCell.appendChild(ackButton);
-            }
-            row.appendChild(actionsCell);
-            
-            alertsList.appendChild(row);
+        // Immediate refresh
+        await Promise.all([
+            refreshJobs(),
+            refreshRuns()
+        ]).catch(error => {
+            console.error('Error refreshing after job end:', error);
         });
+
     } catch (error) {
-        console.error('Error refreshing alerts:', error);
-        showToast('Error', 'Failed to refresh alerts', 'error');
+        console.error('Error ending job:', error);
+        showToast('Error', error.message, 'error');
     }
 }
 
-async function acknowledgeAlert(alertId, statusBadge, actionsCell) {
+async function pauseJob(jobId, event) {
+    if (event) event.preventDefault();
     try {
-        const response = await fetch(`/acknowledge_alert/${alertId}`, {
+        const response = await fetch(`/jobs/${jobId}/pause`, {
             method: 'POST'
         });
         
         if (!response.ok) {
-            throw new Error('Failed to acknowledge alert');
+            throw new Error(`Failed to pause job: ${response.status}`);
         }
         
-        // Update the status badge
-        statusBadge.className = 'badge bg-secondary';
-        statusBadge.innerHTML = '<i class="bi bi-check-circle"></i> Acknowledged';
+        showToast('Success', `Paused monitoring for job ${jobId}`);
         
-        // Remove the acknowledge button
-        actionsCell.innerHTML = '';
-        
-        showToast('Success', 'Alert acknowledged', 'success');
-    } catch (error) {
-        console.error('Error acknowledging alert:', error);
-        showToast('Error', 'Failed to acknowledge alert', 'error');
-    }
-}
-
-// Helper functions
-function getAlertTypeBadgeClass(type) {
-    switch (type) {
-        case 'missed_job':
-            return 'bg-danger';
-        case 'long_running':
-            return 'bg-warning text-dark';
-        default:
-            return 'bg-secondary';
-    }
-}
-
-function formatAlertType(type) {
-    return type.split('_')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-}
-
-function formatClientInfo(clientInfo) {
-    if (!clientInfo) return '';
-    
-    try {
-        const info = typeof clientInfo === 'string' ? JSON.parse(clientInfo) : clientInfo;
-        return JSON.stringify(info, null, 2);
-    } catch (error) {
-        console.error('Error formatting client info:', error);
-        return String(clientInfo);
-    }
-}
-
-function showClientInfo(clientInfo) {
-    const modal = new bootstrap.Modal(document.getElementById('clientInfoModal'));
-    const content = document.getElementById('clientInfoContent');
-    
-    try {
-        const formattedInfo = formatClientInfo(clientInfo);
-        content.innerHTML = `<pre class="mb-0">${formattedInfo}</pre>`;
-        content.classList.add('bg-light', 'p-3', 'rounded');
-        
-        // Add syntax highlighting if available
-        if (window.hljs) {
-            content.querySelector('pre').classList.add('json');
-            hljs.highlightElement(content.querySelector('pre'));
-        }
-    } catch (error) {
-        content.innerHTML = '<div class="alert alert-danger">Error displaying client info</div>';
-    }
-    
-    modal.show();
-}
-
-// Update schedule help text when schedule input changes
-document.getElementById('schedule').addEventListener('input', function(e) {
-    const scheduleHint = document.getElementById('scheduleHint');
-    try {
-        const expression = e.target.value.trim();
-        if (expression) {
-            scheduleHint.textContent = cronstrue.toString(expression);
-        } else {
-            scheduleHint.textContent = '';
-        }
-    } catch (error) {
-        scheduleHint.textContent = 'Invalid cron expression';
-    }
-});
-
-// Theme handling
-function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-bs-theme', savedTheme);
-    document.getElementById('themeSwitch').checked = savedTheme === 'dark';
-    
-    // Update navbar class based on theme
-    const navbar = document.querySelector('.navbar');
-    if (savedTheme === 'dark') {
-        navbar.classList.remove('navbar-light', 'bg-light');
-        navbar.classList.add('navbar-dark', 'bg-dark');
-    } else {
-        navbar.classList.remove('navbar-dark', 'bg-dark');
-        navbar.classList.add('navbar-light', 'bg-light');
-    }
-}
-
-function toggleTheme(e) {
-    const isDark = e.target.checked;
-    const theme = isDark ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-bs-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    // Update navbar class
-    const navbar = document.querySelector('.navbar');
-    if (isDark) {
-        navbar.classList.remove('navbar-light', 'bg-light');
-        navbar.classList.add('navbar-dark', 'bg-dark');
-    } else {
-        navbar.classList.remove('navbar-dark', 'bg-dark');
-        navbar.classList.add('navbar-light', 'bg-light');
-    }
-}
-
-// Initialize theme and start refreshing data
-document.addEventListener('DOMContentLoaded', async () => {
-    initTheme();
-    document.getElementById('themeSwitch').addEventListener('change', toggleTheme);
-    
-    // Initial load - with error handling
-    try {
+        // Immediate refresh
         await Promise.all([
-            refreshJobs().catch(error => console.error('Initial jobs refresh failed:', error)),
-            refreshRuns().catch(error => console.error('Initial runs refresh failed:', error)),
-            refreshAlerts().catch(error => console.error('Initial alerts refresh failed:', error))
-        ]);
+            refreshJobs(),
+            refreshRuns()
+        ]).catch(error => {
+            console.error('Error refreshing after job pause:', error);
+        });
     } catch (error) {
-        console.error('Error during initial data load:', error);
+        showToast('Error', `Failed to pause job: ${error.message}`, 'error');
     }
-    
-    // Add event listeners
-    const newJobForm = document.getElementById('newJobForm');
-    if (newJobForm) {
-        newJobForm.addEventListener('submit', addJob);
-    } else {
-        console.error('New job form not found');
-    }
-    
-    // Add event listener to simulation form
-    document.getElementById('simulationForm').addEventListener('submit', (event) => {
-        event.preventDefault();
-        simulateJobStart();
-    });
-    
-    // Set up periodic refresh - each with its own error handling
-    setInterval(async () => {
-        try {
-            await refreshJobs();
-        } catch (error) {
-            console.error('Jobs refresh failed:', error);
-        }
-    }, 30000);
-    
-    setInterval(async () => {
-        try {
-            await refreshRuns();
-        } catch (error) {
-            console.error('Runs refresh failed:', error);
-        }
-    }, 15000);
-    
-    setInterval(async () => {
-        try {
-            await refreshAlerts();
-        } catch (error) {
-            console.error('Alerts refresh failed:', error);
-        }
-    }, 10000);
-});
+}
 
-function showAlertMessage(message) {
-    const messageContent = document.getElementById('alertMessageContent');
-    messageContent.textContent = message;
-    const modal = new bootstrap.Modal(document.getElementById('alertMessageModal'));
-    modal.show();
+async function resumeJob(jobId, event) {
+    if (event) event.preventDefault();
+    try {
+        const response = await fetch(`/jobs/${jobId}/resume`, {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to resume job: ${response.status}`);
+        }
+        
+        showToast('Success', `Resumed monitoring for job ${jobId}`);
+        
+        // Immediate refresh
+        await Promise.all([
+            refreshJobs(),
+            refreshRuns()
+        ]).catch(error => {
+            console.error('Error refreshing after job resume:', error);
+        });
+    } catch (error) {
+        showToast('Error', `Failed to resume job: ${error.message}`, 'error');
+    }
 }
 
 // Delete job
-async function deleteJob(jobId) {
+async function deleteJob(jobId, event) {
+    if (event) event.preventDefault();
     if (!confirm(`Are you sure you want to delete job ${jobId}?`)) {
         return;
     }
@@ -620,9 +351,7 @@ async function deleteJob(jobId) {
             // Refresh all tables since delete affects everything
             await Promise.all([
                 refreshJobs(),
-                refreshSimulations(),
-                refreshRuns(),
-                refreshAlerts()
+                refreshRuns()
             ]);
         } else {
             const data = await response.json();
@@ -724,191 +453,350 @@ async function addJob(event) {
         // Refresh all relevant tables
         await Promise.all([
             refreshJobs(),
-            refreshSimulations()
+            refreshRuns()
         ]);
     } catch (error) {
         showToast('Error', 'Failed to configure job: ' + error.message, 'error');
     }
 }
 
-// Start job
-async function startJob(jobId) {
-    const clientInfoText = document.getElementById('clientInfo').value;
-    let metadata = null;
+// Helper functions
+function formatClientInfo(clientInfo) {
+    if (!clientInfo) return '';
     
-    if (clientInfoText.trim()) {
-        try {
-            metadata = { metadata: JSON.parse(clientInfoText) };
-        } catch (e) {
-            alert('Invalid JSON in client info. Please check the format.');
+    try {
+        const info = typeof clientInfo === 'string' ? JSON.parse(clientInfo) : clientInfo;
+        return JSON.stringify(info, null, 2);
+    } catch (error) {
+        console.error('Error formatting client info:', error);
+        return String(clientInfo);
+    }
+}
+
+function showClientInfo(clientInfo) {
+    const modal = new bootstrap.Modal(document.getElementById('clientInfoModal'));
+    const content = document.getElementById('clientInfoContent');
+    
+    try {
+        const formattedInfo = formatClientInfo(clientInfo);
+        content.innerHTML = `<pre class="mb-0">${formattedInfo}</pre>`;
+        content.classList.add('bg-light', 'p-3', 'rounded');
+        
+        // Add syntax highlighting if available
+        if (window.hljs) {
+            content.querySelector('pre').classList.add('json');
+            hljs.highlightElement(content.querySelector('pre'));
+        }
+    } catch (error) {
+        content.innerHTML = '<div class="alert alert-danger">Error displaying client info</div>';
+    }
+    
+    modal.show();
+}
+
+// Update schedule help text when schedule input changes
+document.getElementById('schedule').addEventListener('input', function(e) {
+    const scheduleHint = document.getElementById('scheduleHint');
+    try {
+        const expression = e.target.value.trim();
+        if (expression) {
+            scheduleHint.textContent = cronstrue.toString(expression);
+        } else {
+            scheduleHint.textContent = '';
+        }
+    } catch (error) {
+        scheduleHint.textContent = 'Invalid cron expression';
+    }
+});
+
+// Theme handling
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-bs-theme', savedTheme);
+    document.getElementById('themeSwitch').checked = savedTheme === 'dark';
+    
+    // Update navbar class based on theme
+    const navbar = document.querySelector('.navbar');
+    if (savedTheme === 'dark') {
+        navbar.classList.remove('navbar-light', 'bg-light');
+        navbar.classList.add('navbar-dark', 'bg-dark');
+    } else {
+        navbar.classList.remove('navbar-dark', 'bg-dark');
+        navbar.classList.add('navbar-light', 'bg-light');
+    }
+}
+
+function toggleTheme(e) {
+    const isDark = e.target.checked;
+    const theme = isDark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-bs-theme', theme);
+    localStorage.setItem('theme', theme);
+    
+    // Update navbar class
+    const navbar = document.querySelector('.navbar');
+    if (isDark) {
+        navbar.classList.remove('navbar-light', 'bg-light');
+        navbar.classList.add('navbar-dark', 'bg-dark');
+    } else {
+        navbar.classList.remove('navbar-dark', 'bg-dark');
+        navbar.classList.add('navbar-light', 'bg-light');
+    }
+}
+
+// Alerts functionality
+async function refreshAlerts() {
+    console.log('Refreshing alerts...'); // Debug log
+    const showAcknowledged = document.getElementById('showAcknowledged')?.checked || false;
+    
+    try {
+        const response = await fetch(`/job_alerts?include_acknowledged=${showAcknowledged}`);
+        const alerts = await response.json();
+        console.log('Received alerts:', alerts); // Debug log
+        
+        const alertsList = document.getElementById('alertsList');
+        const noAlerts = document.getElementById('noAlerts');
+        const alertsContainer = document.querySelector('.alerts-container');
+        const showAcknowledgedCheckbox = document.getElementById('showAcknowledged');
+        
+        if (!alertsList || !noAlerts || !alertsContainer || !showAcknowledgedCheckbox) {
+            console.error('Required alert elements not found');
             return;
         }
-    }
-
-    try {
-        const response = await fetch(`/jobs/${jobId}/start`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: metadata ? JSON.stringify(metadata) : null
-        });
-        const data = await response.json();
         
-        if (response.ok) {
-            showToast('Success', 'Job started successfully');
-            if (data.alert) {
-                showToast('Warning', data.alert);
-            }
-            // Refresh all relevant tables
-            await Promise.all([
-                refreshSimulations(),
-                refreshRuns(),
-                refreshAlerts()
-            ]);
+        // Clear existing alerts
+        alertsList.innerHTML = '';
+        
+        let visibleAlerts = alerts;
+        if (!showAcknowledgedCheckbox.checked) {
+            visibleAlerts = alerts.filter(alert => !alert.acknowledged);
+        }
+
+        if (visibleAlerts.length === 0) {
+            noAlerts.classList.remove('d-none');
+            alertsList.classList.add('d-none');
         } else {
-            showToast('Error', data.detail || 'Failed to start job', 'error');
+            noAlerts.classList.add('d-none');
+            alertsList.classList.remove('d-none');
+            
+            visibleAlerts.forEach(alert => {
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert-item ${alert.acknowledged ? 'acknowledged' : ''}`;
+                alertDiv.innerHTML = `
+                    <span class="badge ${getAlertTypeBadgeClass(alert.type)}">${formatAlertType(alert.type)}</span>
+                    <span class="job-id">${alert.job_id}</span>
+                    <div class="actions">
+                        ${!alert.acknowledged ? 
+                            `<button class="btn btn-sm btn-outline-secondary" onclick="acknowledgeAlert('${alert.id}')">
+                                <i class="bi bi-check2"></i>
+                            </button>` : ''
+                        }
+                        <button class="btn btn-sm btn-outline-info" onclick="toggleDetails('${alert.id}')">
+                            <i class="bi bi-info-circle"></i>
+                        </button>
+                    </div>
+                `;
+                
+                alertsList.appendChild(alertDiv);
+                
+                // Create details section
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'alert-details';
+                detailsDiv.id = `details-${alert.id}`;
+                detailsDiv.innerHTML = `
+                    <p><strong>Time:</strong> ${new Date(alert.detected_time).toLocaleString()}</p>
+                    <p><strong>Message:</strong> ${alert.alert_message}</p>
+                    ${alert.acknowledged ? 
+                        `<p><strong>Acknowledged:</strong> ${new Date(alert.created_at).toLocaleString()}</p>` : ''
+                    }
+                `;
+                
+                alertsList.appendChild(detailsDiv);
+            });
         }
+
+        // Add or remove has-unacknowledged class based on unacknowledged alerts
+        const hasUnacknowledged = alerts.some(alert => !alert.acknowledged);
+        alertsContainer.classList.toggle('has-unacknowledged', hasUnacknowledged);
     } catch (error) {
-        console.error('Error starting job:', error);
-        showToast('Error', 'Failed to start job', 'error');
+        console.error('Error fetching alerts:', error);
     }
 }
 
-// Pause job
-async function pauseJob(jobId) {
+function getAlertTypeBadgeClass(type) {
+    switch (type.toLowerCase()) {
+        case 'missed_job':
+            return 'badge-missed-job';
+        case 'long_running':
+            return 'badge-long-running';
+        default:
+            return 'bg-secondary';
+    }
+}
+
+function formatAlertType(type) {
+    return type.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+}
+
+function toggleDetails(alertId) {
+    const details = document.getElementById(`details-${alertId}`);
+    if (details) {
+        details.classList.toggle('active');
+    }
+}
+
+async function acknowledgeAlert(alertId) {
     try {
-        const response = await fetch(`/jobs/${jobId}/pause`, {
-            method: 'POST'
-        });
+        const response = await fetch(`/acknowledge_alert/${alertId}`, { method: 'POST' });
+        if (!response.ok) throw new Error('Failed to acknowledge alert');
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        await Promise.all([
-            refreshJobs(),
-            refreshSimulations()
-        ]);
-        showToast('Success', `Paused monitoring for job ${jobId}`);
+        showToast('Success', 'Alert acknowledged');
+        // Refresh the alerts list
+        await refreshAlerts();
     } catch (error) {
-        showToast('Error', `Failed to pause job: ${error.message}`, 'error');
+        showToast('Error', 'Failed to acknowledge alert: ' + error.message, 'error');
     }
 }
 
-// Resume job
-async function resumeJob(jobId) {
-    try {
-        const response = await fetch(`/jobs/${jobId}/resume`, {
-            method: 'POST'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        await Promise.all([
-            refreshJobs(),
-            refreshSimulations()
-        ]);
-        showToast('Success', `Resumed monitoring for job ${jobId}`);
-    } catch (error) {
-        showToast('Error', `Failed to resume job: ${error.message}`, 'error');
-    }
-}
-
-// End job
-async function endJob(jobId) {
-    console.log('Attempting to end job:', jobId);
-    try {
-        const response = await fetch(`/jobs/${jobId}/end`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to end job');
-        }
-        
-        console.log('Job ended successfully:', jobId);
-        showToast('Success', 'Job ended successfully');
-        
-        // Refresh all relevant tables
-        await Promise.all([
-            refreshSimulations(),
-            refreshRuns(),
-            refreshAlerts()
-        ]);
-        
-        // Disable end button after successful end
-        const endJobBtn = document.getElementById('endJobBtn');
-        if (endJobBtn) {
-            endJobBtn.disabled = true;
-        }
-    } catch (error) {
-        console.error('Error ending job:', error);
-        showToast('Error', 'Failed to end job: ' + error.message, 'error');
-    }
-}
-
-// Simulation functions
-async function simulateJobStart() {
-    console.log('Starting job simulation...');
-    const jobId = document.getElementById('jobSelect').value;
-    const clientInfoText = document.getElementById('clientInfo').value;
+// Initialize alerts functionality
+document.addEventListener('DOMContentLoaded', function() {
+    // Initial alerts load
+    refreshAlerts();
     
-    if (!jobId) {
-        showToast('Error', 'Please select a job', 'error');
+    // Set up collapse button
+    const collapseButton = document.getElementById('collapseAlerts');
+    if (collapseButton) {
+        collapseButton.addEventListener('click', function() {
+            const alertsSection = document.getElementById('alertsSection');
+            alertsSection.classList.toggle('collapsed');
+        });
+    }
+    
+    // Set up show acknowledged checkbox
+    const showAcknowledgedCheckbox = document.getElementById('showAcknowledged');
+    if (showAcknowledgedCheckbox) {
+        showAcknowledgedCheckbox.addEventListener('change', refreshAlerts);
+    }
+});
+
+// Main initialization
+document.addEventListener('DOMContentLoaded', async () => {
+    initTheme();
+    document.getElementById('themeSwitch').addEventListener('change', toggleTheme);
+    
+    // Initial load - with error handling
+    try {
+        await Promise.all([
+            refreshJobs().catch(error => console.error('Initial jobs refresh failed:', error)),
+            refreshRuns().catch(error => console.error('Initial runs refresh failed:', error)),
+            refreshAlerts().catch(error => console.error('Initial alerts refresh failed:', error))
+        ]);
+    } catch (error) {
+        console.error('Error during initial data load:', error);
+    }
+    
+    // Add event listeners
+    const newJobForm = document.getElementById('newJobForm');
+    if (newJobForm) {
+        newJobForm.addEventListener('submit', addJob);
+    }
+    
+    // Set up periodic refresh
+    setInterval(async () => {
+        try {
+            await Promise.all([
+                refreshJobs(),
+                refreshRuns()
+            ]);
+        } catch (error) {
+            console.error('Error in periodic refresh:', error);
+        }
+    }, 5000); // Refresh every 5 seconds
+
+    // Set up alerts refresh
+    setInterval(async () => {
+        try {
+            await refreshAlerts();
+        } catch (error) {
+            console.error('Error refreshing alerts:', error);
+        }
+    }, 30000); // Refresh alerts every 30 seconds
+});
+
+// Set up WebSocket connection for real-time updates
+const socket = new WebSocket('ws://' + window.location.host + '/ws');
+socket.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    if (data.type === 'job_status' || data.type === 'job_update') {
+        refreshJobs(); // Refresh jobs table when job status changes
+    }
+};
+
+// Add event listener for collapse button
+document.addEventListener('DOMContentLoaded', function() {
+    const collapseButton = document.getElementById('collapseAlerts');
+    if (collapseButton) {
+        collapseButton.addEventListener('click', function() {
+            const alertsSection = document.getElementById('alertsSection');
+            alertsSection.classList.toggle('collapsed');
+        });
+    }
+});
+
+function setupAlertsCollapse() {
+    const alertsSection = document.querySelector('.alerts-section');
+    const collapseButton = document.querySelector('.collapse-button');
+    
+    if (!alertsSection || !collapseButton) {
+        console.error('Could not find alerts section or collapse button');
         return;
     }
-    
-    try {
-        console.log('Making API call to start job:', jobId);
-        const metadata = clientInfoText ? { metadata: JSON.parse(clientInfoText) } : null;
-        const response = await fetch(`/jobs/${jobId}/start`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: metadata ? JSON.stringify(metadata) : null
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to start job');
-        }
-        
-        console.log('Job started successfully');
-        showToast('Success', 'Job started successfully');
-        await Promise.all([
-            refreshSimulations(),
-            refreshRuns()
-        ]);
-    } catch (error) {
-        console.error('Error starting job:', error);
-        showToast('Error', 'Failed to start job: ' + error.message, 'error');
+
+    // Set initial state based on localStorage
+    const isCollapsed = localStorage.getItem('alertsCollapsed') === 'true';
+    if (isCollapsed) {
+        alertsSection.classList.add('collapsed');
     }
+
+    collapseButton.addEventListener('click', () => {
+        alertsSection.classList.toggle('collapsed');
+        // Store state in localStorage
+        localStorage.setItem('alertsCollapsed', alertsSection.classList.contains('collapsed'));
+    });
 }
 
-async function simulateJobEnd() {
-    const jobId = document.getElementById('jobSelect').value;
+// Call setupAlertsCollapse when document is ready
+document.addEventListener('DOMContentLoaded', () => {
+    setupAlertsCollapse();
+    initTheme();
+    document.getElementById('themeSwitch').addEventListener('change', toggleTheme);
     
-    if (!jobId) {
-        showToast('Error', 'Please select a job', 'error');
-        return;
-    }
-    
+    // Initial load - with error handling
     try {
-        await fetch(`/jobs/${jobId}/end`, {
-            method: 'POST'
-        });
-        
-        showToast('Success', 'Job ended successfully');
-        refreshRuns();
+        Promise.all([
+            refreshJobs().catch(error => console.error('Initial jobs refresh failed:', error)),
+            refreshRuns().catch(error => console.error('Initial runs refresh failed:', error))
+        ]);
     } catch (error) {
-        showToast('Error', 'Failed to end job: ' + error.message, 'error');
+        console.error('Error during initial data load:', error);
     }
-}
+    
+    // Add event listeners
+    const newJobForm = document.getElementById('newJobForm');
+    if (newJobForm) {
+        newJobForm.addEventListener('submit', addJob);
+    }
+    
+    // Set up periodic refresh - each with its own error handling
+    setInterval(async () => {
+        try {
+            await Promise.all([
+                refreshJobs(),
+                refreshRuns()
+            ]);
+        } catch (error) {
+            console.error('Error in periodic refresh:', error);
+        }
+    }, 5000); // Refresh every 5 seconds
+});

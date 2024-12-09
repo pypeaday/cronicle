@@ -395,10 +395,13 @@ def get_job_alerts(
         results = []
         for row in db.execute(query, params).fetchall():
             result = dict(row)
+            # Convert timestamps
             result['expected_start_time'] = from_db_datetime(result['expected_start_time'])
             result['actual_start_time'] = from_db_datetime(result['actual_start_time'])
             result['detected_time'] = from_db_datetime(result['detected_time'])
             result['created_at'] = from_db_datetime(result['created_at'])
+            # Ensure alert_type is properly set
+            result['type'] = result.pop('alert_type')
             results.append(result)
         
         return results

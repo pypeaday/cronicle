@@ -1,5 +1,7 @@
 # Cronicle
 
+![healthchecks.io](https://healthchecks.io/badge/c56f6c44-4555-4e64-9f20-e3580e/XF1umgiu-2.svg)
+
 A modern, lightweight job monitoring system for tracking scheduled tasks and health checks.
 
 ## Quick Start
@@ -18,19 +20,19 @@ docker compose up --build
 Access Cronicle at `http://localhost:8000`
 
 ### Option 2: Python Setup
-If you prefer a local Python setup:
+If you prefer a local Python setup (I recommend using uv):
 
 1. Create and activate a virtual environment:
    ```bash
-   python -m venv .venv
+   uv venv
    source .venv/bin/activate  # On Linux/macOS
    # OR
    .venv\Scripts\activate     # On Windows
    ```
 
-2. Install dependencies:
+2. Install uv and dependencies:
    ```bash
-   pip install -r requirements.txt
+   uv pip install -r requirements.txt
    ```
 
 3. Run the development server:
