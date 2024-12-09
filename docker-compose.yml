@@ -4,10 +4,13 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - type: bind
+        source: .
+        target: /app
     environment:
       - PYTHONPATH=/app
       - DOCKER_ENV=true
+      - UV_VIRTUALENV=/opt/app-env
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -16,3 +19,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+volumes:
+  venv:
+    name: cronicle-venv

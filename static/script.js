@@ -680,58 +680,53 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Main initialization
-document.addEventListener('DOMContentLoaded', async () => {
+// WebSocket connection
+let ws;
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'refresh') {
+            refreshJobs();
+            refreshRuns();
+            refreshAlerts();
+        }
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket disconnected. Reconnecting in 5s...');
+        setTimeout(connectWebSocket, 5000);
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+}
+
+// Initialize WebSocket connection
+document.addEventListener('DOMContentLoaded', () => {
+    connectWebSocket();
+    setupAlertsCollapse();
     initTheme();
-    document.getElementById('themeSwitch').addEventListener('change', toggleTheme);
     
-    // Initial load - with error handling
-    try {
-        await Promise.all([
-            refreshJobs().catch(error => console.error('Initial jobs refresh failed:', error)),
-            refreshRuns().catch(error => console.error('Initial runs refresh failed:', error)),
-            refreshAlerts().catch(error => console.error('Initial alerts refresh failed:', error))
-        ]);
-    } catch (error) {
-        console.error('Error during initial data load:', error);
-    }
+    // Initial data load
+    refreshJobs();
+    refreshRuns();
+    refreshAlerts();
     
-    // Add event listeners
-    const newJobForm = document.getElementById('newJobForm');
-    if (newJobForm) {
-        newJobForm.addEventListener('submit', addJob);
-    }
-    
-    // Set up periodic refresh
-    setInterval(async () => {
-        try {
-            await Promise.all([
-                refreshJobs(),
-                refreshRuns()
-            ]);
-        } catch (error) {
-            console.error('Error in periodic refresh:', error);
-        }
-    }, 5000); // Refresh every 5 seconds
-
-    // Set up alerts refresh
-    setInterval(async () => {
-        try {
-            await refreshAlerts();
-        } catch (error) {
-            console.error('Error refreshing alerts:', error);
-        }
-    }, 30000); // Refresh alerts every 30 seconds
+    // Set up periodic refreshes
+    setInterval(refreshJobs, 5000);
+    setInterval(refreshRuns, 5000);
+    setInterval(refreshAlerts, 5000);
 });
-
-// Set up WebSocket connection for real-time updates
-const socket = new WebSocket('ws://' + window.location.host + '/ws');
-socket.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    if (data.type === 'job_status' || data.type === 'job_update') {
-        refreshJobs(); // Refresh jobs table when job status changes
-    }
-};
 
 // Add event listener for collapse button
 document.addEventListener('DOMContentLoaded', function() {
@@ -765,38 +760,3 @@ function setupAlertsCollapse() {
         localStorage.setItem('alertsCollapsed', alertsSection.classList.contains('collapsed'));
     });
 }
-
-// Call setupAlertsCollapse when document is ready
-document.addEventListener('DOMContentLoaded', () => {
-    setupAlertsCollapse();
-    initTheme();
-    document.getElementById('themeSwitch').addEventListener('change', toggleTheme);
-    
-    // Initial load - with error handling
-    try {
-        Promise.all([
-            refreshJobs().catch(error => console.error('Initial jobs refresh failed:', error)),
-            refreshRuns().catch(error => console.error('Initial runs refresh failed:', error))
-        ]);
-    } catch (error) {
-        console.error('Error during initial data load:', error);
-    }
-    
-    // Add event listeners
-    const newJobForm = document.getElementById('newJobForm');
-    if (newJobForm) {
-        newJobForm.addEventListener('submit', addJob);
-    }
-    
-    // Set up periodic refresh - each with its own error handling
-    setInterval(async () => {
-        try {
-            await Promise.all([
-                refreshJobs(),
-                refreshRuns()
-            ]);
-        } catch (error) {
-            console.error('Error in periodic refresh:', error);
-        }
-    }, 5000); // Refresh every 5 seconds
-});
