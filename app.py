@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, validator, Field
@@ -139,6 +139,29 @@ async def check_job_issues():
         
         # Check more frequently for sub-minute schedules
         await asyncio.sleep(5)  # Check every 5 seconds instead of every minute
+
+# WebSocket connections store
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except WebSocketDisconnect:
+                self.disconnect(connection)
+            except Exception as e:
+                print(f"Error broadcasting to WebSocket: {e}")
+
+manager = ConnectionManager()
 
 # Startup and shutdown events manager
 @asynccontextmanager
@@ -503,6 +526,16 @@ async def resume_job(job_id: str):
         return {"message": f"Job {job_id} resumed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep the connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 if __name__ == "__main__":
     import uvicorn
