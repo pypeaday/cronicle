@@ -2,6 +2,7 @@ FROM python:3.11-slim
 ENV VIRTUAL_ENV /opt/app-env
 ENV PATH "${VIRTUAL_ENV}/bin:$PATH"
 ENV UV_VIRTUALENV ${VIRTUAL_ENV}
+ENV CRONICLE_PORT 8000
 
 WORKDIR /app
 
@@ -32,4 +33,4 @@ USER appuser
 EXPOSE 8000
 
 # Command to run the application
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "app.py"]

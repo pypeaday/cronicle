@@ -511,36 +511,42 @@ document.getElementById('schedule').addEventListener('input', function(e) {
 
 // Theme handling
 function initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-bs-theme', savedTheme);
-    document.getElementById('themeSwitch').checked = savedTheme === 'dark';
+    const themeToggle = document.getElementById('themeToggle');
+    const themeIcon = themeToggle.querySelector('i');
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    // Update navbar class based on theme
-    const navbar = document.querySelector('.navbar');
-    if (savedTheme === 'dark') {
-        navbar.classList.remove('navbar-light', 'bg-light');
-        navbar.classList.add('navbar-dark', 'bg-dark');
-    } else {
-        navbar.classList.remove('navbar-dark', 'bg-dark');
-        navbar.classList.add('navbar-light', 'bg-light');
-    }
+    // Set initial theme based on saved preference or system preference
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-bs-theme', initialTheme);
+    updateThemeIcon(themeIcon, initialTheme);
+    
+    // Listen for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        if (!localStorage.getItem('theme')) {
+            const newTheme = e.matches ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+            updateThemeIcon(themeIcon, newTheme);
+        }
+    });
+    
+    // Add theme toggle event listener
+    themeToggle.addEventListener('click', () => {
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-bs-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateThemeIcon(themeIcon, newTheme);
+        
+        // Dispatch event for components that need to know about theme changes
+        window.dispatchEvent(new CustomEvent('themechange', { detail: { theme: newTheme } }));
+    });
 }
 
-function toggleTheme(e) {
-    const isDark = e.target.checked;
-    const theme = isDark ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-bs-theme', theme);
-    localStorage.setItem('theme', theme);
-    
-    // Update navbar class
-    const navbar = document.querySelector('.navbar');
-    if (isDark) {
-        navbar.classList.remove('navbar-light', 'bg-light');
-        navbar.classList.add('navbar-dark', 'bg-dark');
-    } else {
-        navbar.classList.remove('navbar-dark', 'bg-dark');
-        navbar.classList.add('navbar-light', 'bg-light');
-    }
+function updateThemeIcon(icon, theme) {
+    // Show sun icon in dark mode (to switch to light) and moon icon in light mode (to switch to dark)
+    icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
 }
 
 // Alerts functionality
